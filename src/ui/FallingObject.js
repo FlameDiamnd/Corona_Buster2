@@ -7,7 +7,7 @@ Phaser.Physics.Arcade.Sprite{  //-----> Kelas ini digunakan untuk membuat object
     super(scene, x, y, texture);
     this.scene = scene;
     this.speed = config.speed;
-    this.rotationVal = config.rotation;
+    this.rotationVal = -0.1;
    }
    spawn(positionX){  
     this.setPosition(positionX, -10); //------> Nilai positionX akan diatur ketika method ini dipanggil
