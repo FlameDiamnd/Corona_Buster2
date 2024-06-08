@@ -1,6 +1,8 @@
 import Phaser from "phaser";
-import FallingObject from "../ui/FallingObject"; //----> Import kelas bernama FallingObject dari folder ui
+import FallingObject from "../ui/FallingObject";
 import Laser from "../ui/Laser";
+// import bgsound from "../../public/sfx/alone_against_enemy.ogg";
+
 export default class CoronaBusterScene extends Phaser.Scene {
   constructor() {
     //menginisialisasi apa yang harus dilakukan pada code selanjutnya
@@ -17,8 +19,14 @@ export default class CoronaBusterScene extends Phaser.Scene {
     this.cursors = undefined;
     this.enemies = undefined;
     this.enemySpeed = 50;
-    this.lsers = undefined;
+    this.lasers = undefined;
     this.lastFired = 10;
+    this.scoreLabel = undefined;
+    this.score = 0;
+    this.lifeLabel = undefined;
+    this.life = 3;
+    this.handsanitizer = undefined;
+    this.backsound = undefined;
   }
 
   preload() {
@@ -29,16 +37,28 @@ export default class CoronaBusterScene extends Phaser.Scene {
     this.load.image("right-btn", "images/right-btn.png");
     this.load.image("shoot-btn", "images/shoot-btn.png");
 
+    //Player
     this.load.spritesheet("player", "images/ship.png", {
       frameWidth: 66,
       frameHeight: 66,
     });
 
     this.load.image("enemy", "images/enemy.png");
+
+    //Laser
     this.load.spritesheet("laser", "images/laser-bolts.png", {
       frameWidth: 16,
       frameHeight: 16,
     });
+
+    this.load.image("handsanitizer", "images/handsanitizer.png");
+
+    //Sound
+    this.load.audio("bgsound", "sfx/alone_against_enemy.ogg");
+    this.load.audio("laser", "sfx/sfx_laser.ogg");
+    this.load.audio("destroy", "sfx/destroy.mp3");
+    this.load.audio("life", "sfx/handsanitizer.mp3");
+    this.load.audio("gameover", "sfx/gameover.wav");
   }
 
   create() {
@@ -67,30 +87,90 @@ export default class CoronaBusterScene extends Phaser.Scene {
     //Cursors Arrows
     this.cursors = this.input.keyboard.createCursorKeys();
 
+    //Enemy
     this.enemies = this.physics.add.group({
       classType: FallingObject,
       maxSize: 10, //-----> banyaknya enemy dalam satu grup
       runChildUpdate: true,
     });
 
+    //Eventtime Enemy
     this.time.addEvent({
       delay: Phaser.Math.Between(1000, 5000), //--------> Delay random  rentang 1-5 detik
       callback: this.spawnEnemy,
       callbackScope: this, //--------------------> Memanggil method bernama spawnEnemy
       loop: true,
     });
+
+    //Laser
     this.lasers = this.physics.add.group({
       classType: Laser,
       maxSize: 10,
       runChildUpdate: true,
     });
+
+    //Overlap enemy dan laser
     this.physics.add.overlap(
       this.lasers,
       this.enemies,
-      this.hitEnemy,
+      this.collectEnemy,
       null,
       this
     );
+
+    //score
+    this.scoreLabel = this.add
+      .text(10, 10, "Score", {
+        fontSize: "16px",
+        color: "black",
+        backgroundColor: "white",
+      })
+      .setDepth(1);
+
+    //Life
+    this.lifeLabel = this.add
+      .text(10, 30, "Life", {
+        fontSize: "16px",
+        color: "black",
+        backgroundColor: "white",
+      })
+      .setDepth(1);
+
+    //Decrease life
+    this.physics.add.overlap(
+      this.player,
+      this.enemies,
+      this.decreaseLife,
+      null,
+      this
+    );
+
+    //handsanitizer
+    this.handsanitizer = this.physics.add.group({
+      classType: FallingObject,
+      runChildUpdate: true,
+    });
+    this.time.addEvent({
+      delay: 10000, // delay: 10000 = handsanitizer di spawn setiap 10s
+      callback: this.spawnHandsanitizer,
+      callbackScope: this,
+      loop: true,
+    });
+
+    //backsound
+    this.backsound = this.sound.add("bgsound");
+    var soundConfig = {
+      loop: true,
+      volume: 0.5,
+    };
+    this.backsound.play(soundConfig);
+  }
+
+  //overlap laser dan enemy
+  collectEnemy(laser, enemy) {
+    enemy.destroy();
+    laser.destroy();
+    this.score += 10;
   }
 
   update(time) {
@@ -106,6 +186,21 @@ export default class CoronaBusterScene extends Phaser.Scene {
 
     //MovePlayer
     this.movePlayer(this.player, time);
+
+    //Score
+    this.scoreLabel.setText("Score : " + this.score);
+
+    //Life
+    this.lifeLabel.setText("Life : " + this.life);
+
+    //Overlap handsanitizer dan player
+    this.physics.add.overlap(
+      this.player,
+      this.handsanitizer,
+      this.increaseLife,
+      null,
+      this
+    );
   }
 
   //methode button
@@ -168,7 +263,7 @@ export default class CoronaBusterScene extends Phaser.Scene {
       this
     );
     shoot.on(
-      "pointerup",
+      "pointerout",
       () => {
         this.shoot = false;
       },
@@ -198,11 +293,14 @@ export default class CoronaBusterScene extends Phaser.Scene {
       player.setVelocityY(0);
       player.anims.play("turn");
     }
+
+    //Laser
     if (this.shoot && time > this.lastFired) {
       const laser = this.lasers.get(0, 0, "laser");
       if (laser) {
         laser.fire(this.player.x, this.player.y);
-        this.lastFired = time + 200;
+        this.lastFired = time + 150;
+        this.sound.play("laser");
       }
     }
   }
@@ -240,8 +338,8 @@ export default class CoronaBusterScene extends Phaser.Scene {
 
   spawnEnemy() {
     const config = {
-      speed: 30, //-----------> Mengatur kecepatan dan besar rotasi dari enemy
-      rotation: -10,
+      speed: 40, //-----------> Mengatur kecepatan dan besar rotasi dari enemy
+      rotation: 0.1,
     };
     // @ts-ignore
     const enemy = this.enemies.get(0, 0, "enemy", config);
@@ -250,8 +348,57 @@ export default class CoronaBusterScene extends Phaser.Scene {
       enemy.spawn(positionX); //--------------> Memanggil method spawn dengan parameter nilai posisi sumbux
     }
   }
+
   hitEnemy(laser, enemy) {
-    laser.die();
+    laser.die(); //--------> Laser dan enemy dihancurkan
     enemy.die();
+    this.score += 10;
+    this.sound.play("destroy");
   }
+
+  //Menghilangkan player jika terkena enemy
+  decreaseLife(player, enemy) {
+    enemy.die();
+    this.life--;
+    if (this.life == 2) {
+      player.setTint(0xff0000);
+    } else if (this.life == 1) {
+      player.setTint(0xff0000).setAlpha(0.2);
+    } else if (this.life == 0) {
+      this.sound.stopAll();
+      this.sound.play("gameover");
+      this.scene.start("over-scene", { score: this.score });
+    }
+  }
+
+  //spawnhandsanitizer
+  spawnHandsanitizer() {
+    const config = {
+      speed: 60,
+      rotation: 0, // ------------> handsanitizer tidak berputar
+    };
+    // @ts-ignore
+    const handsanitizer = this.handsanitizer.get(0, 0, "handsanitizer", config);
+    const positionX = Phaser.Math.Between(70, 330);
+    if (handsanitizer) {
+      handsanitizer.spawn(positionX);
+    }
+  }
+
+  increaseLife(player, handsanitizer) {
+    handsanitizer.destroy();
+    this.life++;
+    this.sound.play("life");
+
+    if (this.life >= 3) {
+      //------> Menambah 1 life
+      player.clearTint().setAlpha(1);
+    } else if (this.life == 2) {
+      player.setTint(0x00ff00);
+    } else if (this.life == 1) {
+      player.setTint(0xffff00);
+    }
+  }
+
+  // clearTint = menghapus warna sebelumnya dan mengembalikan warna objek seperti semula
 }
